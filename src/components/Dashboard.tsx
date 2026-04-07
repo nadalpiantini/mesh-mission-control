@@ -28,7 +28,11 @@ interface MeshData {
 }
 
 export function Dashboard() {
-  const [meshData, setMeshData] = useState<MeshData | null>(null);
+  const [meshData, setMeshData] = useState<MeshData>({
+    services: [],
+    launchdServices: [],
+    cronJobs: [],
+  });
   const [isOnline, setIsOnline] = useState(false);
 
   useEffect(() => {
@@ -53,9 +57,9 @@ export function Dashboard() {
 
       if (data.type === 'initial' || data.type === 'update') {
         setMeshData({
-          services: data.services,
-          launchdServices: data.launchdServices,
-          cronJobs: data.cronJobs,
+          services: data.services || [],
+          launchdServices: data.launchdServices || [],
+          cronJobs: data.cronJobs || [],
         });
       }
     };
@@ -69,16 +73,6 @@ export function Dashboard() {
       eventSource.close();
     };
   }, []);
-
-  if (!meshData) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
-        <div className="text-2xl text-primary font-semibold animate-pulse">
-          Loading mesh data...
-        </div>
-      </div>
-    );
-  }
 
   const activeLaunchdServices = meshData.launchdServices.filter(s => s.status === 'active').length;
   const squadronServices = meshData.launchdServices.filter(s =>
