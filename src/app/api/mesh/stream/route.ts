@@ -19,12 +19,19 @@ export async function GET(request: Request) {
 
       // Send initial data
       try {
-        const { stdout: dockerOutput } = await execAsync('docker ps --format "{{.Names}}\t{{.Status}}"');
+        const { stdout: dockerOutput } = await execAsync('docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"');
+        const { stdout: launchdOutput } = await execAsync('launchctl list');
+        const { stdout: cronOutput } = await execAsync('crontab -l').catch(() => ({ stdout: '' }));
+
         const services = parseDockerServices(dockerOutput);
+        const launchdServices = parseLaunchdServices(launchdOutput);
+        const cronJobs = parseCronJobs(cronOutput);
 
         sendEvent({
           type: 'initial',
           services,
+          launchdServices,
+          cronJobs,
           timestamp: new Date().toISOString(),
         });
       } catch (error) {
@@ -38,12 +45,19 @@ export async function GET(request: Request) {
       // Poll every 5 seconds for updates
       const interval = setInterval(async () => {
         try {
-          const { stdout: dockerOutput } = await execAsync('docker ps --format "{{.Names}}\t{{.Status}}"');
+          const { stdout: dockerOutput } = await execAsync('docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"');
+          const { stdout: launchdOutput } = await execAsync('launchctl list');
+          const { stdout: cronOutput } = await execAsync('crontab -l').catch(() => ({ stdout: '' }));
+
           const services = parseDockerServices(dockerOutput);
+          const launchdServices = parseLaunchdServices(launchdOutput);
+          const cronJobs = parseCronJobs(cronOutput);
 
           sendEvent({
             type: 'update',
             services,
+            launchdServices,
+            cronJobs,
             timestamp: new Date().toISOString(),
           });
         } catch (error) {
@@ -69,15 +83,46 @@ export async function GET(request: Request) {
 }
 
 function parseDockerServices(output: string) {
-  const lines = output.trim().split('\n').slice(1);
+  const lines = output.trim().split('\n');
   return lines
-    .filter(line => line.trim())
+    .filter(line => line.trim() && !line.includes('NAMES'))
     .map(line => {
       const [name, status, ports] = line.split('\t');
       return {
         name: name.replace('sephirot-', '').toUpperCase(),
         status: status.includes('Up') ? 'active' : 'inactive',
         ports: ports || 'N/A',
+      };
+    });
+}
+
+function parseLaunchdServices(output: string) {
+  const lines = output.trim().split('\n');
+  const meshServices = lines
+    .filter(line => line.includes('openclaw') || line.includes('sephirot'))
+    .map(line => {
+      const [pid, status, label] = line.split('\t');
+      return {
+        label: label.trim(),
+        pid: parseInt(pid) || null,
+        status: status === '0' ? 'active' : status === '127' ? 'disabled' : 'unknown',
+      };
+    });
+
+  return meshServices;
+}
+
+function parseCronJobs(output: string) {
+  const lines = output.trim().split('\n');
+  return lines
+    .filter(line => !line.startsWith('#') && line.trim())
+    .map(line => {
+      const parts = line.split(' ');
+      const schedule = parts.slice(0, 5).join(' ');
+      const command = parts.slice(5).join(' ');
+      return {
+        schedule,
+        command,
       };
     });
 }

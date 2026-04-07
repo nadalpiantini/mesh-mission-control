@@ -36,9 +36,9 @@ export async function GET() {
 }
 
 function parseDockerServices(output: string) {
-  const lines = output.trim().split('\n').slice(1); // Skip header
+  const lines = output.trim().split('\n');
   return lines
-    .filter(line => line.trim())
+    .filter(line => line.trim() && !line.includes('NAMES'))
     .map(line => {
       const [name, status, ports] = line.split('\t');
       return {
@@ -70,10 +70,12 @@ function parseCronJobs(output: string) {
   return lines
     .filter(line => !line.startsWith('#') && line.trim())
     .map(line => {
-      const [schedule, ...commandParts] = line.split(' ');
+      const parts = line.split(' ');
+      const schedule = parts.slice(0, 5).join(' ');
+      const command = parts.slice(5).join(' ');
       return {
         schedule,
-        command: commandParts.join(' '),
+        command,
       };
     });
 }
